@@ -40,4 +40,23 @@ To run it manually:
 python3 -m app.main
 ```
 
-To schedule it with systemd to run every hour, you will copy the `.service` and `.timer` files (to be provided) to `/etc/systemd/system/` and enable the timer.
+To schedule it with systemd to run every hour on the Pi:
+```bash
+cd ~/email-ai-assistant
+mkdir -p logs
+sudo cp email-assistant.service email-assistant.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now email-assistant.timer
+```
+
+Check the timer and recent run logs:
+```bash
+systemctl list-timers email-assistant.timer
+sudo systemctl status email-assistant.timer
+sudo journalctl -u email-assistant.service -n 50 --no-pager
+```
+
+Run the service immediately for a manual test:
+```bash
+sudo systemctl start email-assistant.service
+```

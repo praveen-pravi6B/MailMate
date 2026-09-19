@@ -4,11 +4,11 @@ After=network.target
 
 [Service]
 Type=oneshot
-User=pi
-WorkingDirectory=/home/pi/email-ai-assistant
-ExecStart=/home/pi/email-ai-assistant/.venv/bin/python -m app.main
-StandardOutput=append:/home/pi/email-ai-assistant/logs/email-assistant.log
-StandardError=append:/home/pi/email-ai-assistant/logs/email-assistant.log
+User=praveen
+WorkingDirectory=/home/praveen/email-ai-assistant
+ExecStart=/home/praveen/email-ai-assistant/.venv/bin/python -m app.main
+StandardOutput=append:/home/praveen/email-ai-assistant/logs/email-assistant.log
+StandardError=append:/home/praveen/email-ai-assistant/logs/email-assistant.log
 
 [Install]
 WantedBy=multi-user.target
