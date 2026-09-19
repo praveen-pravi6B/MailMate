@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     gmail_refresh_token: str = ""
     
     hf_token: str = ""
-    hf_model: str = "meta-llama/Meta-Llama-3-8B-Instruct"
+    hf_model: str = "openai/gpt-oss-120b:fastest"
     
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
