@@ -1,0 +1,14 @@
+[Unit]
+Description=Email AI Assistant Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/email-ai-assistant
+ExecStart=/home/pi/email-ai-assistant/.venv/bin/python -m app.main
+StandardOutput=append:/home/pi/email-ai-assistant/logs/email-assistant.log
+StandardError=append:/home/pi/email-ai-assistant/logs/email-assistant.log
+
+[Install]
+WantedBy=multi-user.target
