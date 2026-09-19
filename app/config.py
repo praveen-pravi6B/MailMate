@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     calendar_id: str = "primary"
     min_ai_confidence: float = 0.85
     max_email_length: int = 10000
+    ai_fallback_on_error: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

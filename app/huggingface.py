@@ -4,10 +4,10 @@ from app.config import settings
 from app.models import AIResponse
 from huggingface_hub import InferenceClient
 
-def analyze_email(email_body: str) -> AIResponse:
+def analyze_email(email_body: str, subject: str = "") -> AIResponse:
     if not settings.hf_token:
-        logging.warning("Hugging Face token missing. Returning dummy response.")
-        return AIResponse(summary="HF Token Missing", importance="low", action_required=False)
+        logging.warning("Hugging Face token missing.")
+        return _fallback_response(email_body, subject)
         
     # Truncate if too long
     if len(email_body) > settings.max_email_length:
@@ -69,4 +69,29 @@ def analyze_email(email_body: str) -> AIResponse:
         
     except Exception as e:
         logging.error(f"HF API Error: {e}")
+        if settings.ai_fallback_on_error:
+            logging.warning("Using basic local summary fallback.")
+            return _fallback_response(email_body, subject)
         return AIResponse(summary="Failed to analyze email", importance="low", action_required=False)
+
+
+def _fallback_response(email_body: str, subject: str = "") -> AIResponse:
+    snippet = " ".join(email_body.split())[:180]
+    if subject and snippet:
+        summary = f"{subject}: {snippet}"
+    elif subject:
+        summary = subject
+    elif snippet:
+        summary = snippet
+    else:
+        summary = "Email received with no readable body"
+
+    action_words = ("reply", "respond", "submit", "review", "pay", "confirm", "complete", "schedule")
+    lowered = f"{subject} {email_body}".lower()
+    action_required = any(word in lowered for word in action_words)
+
+    return AIResponse(
+        summary=summary,
+        importance="medium" if action_required else "low",
+        action_required=action_required,
+    )
