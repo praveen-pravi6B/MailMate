@@ -19,11 +19,11 @@ def send_summary(ai_responses: list[AIResponse]):
     
     for r in ai_responses:
         if r.importance.lower() == 'high':
-            high_importance.append(r.summary)
+            high_importance.append(_format_summary_item(r))
         elif r.action_required:
-            actions.append(r.summary)
+            actions.append(_format_summary_item(r))
         else:
-            others.append(r.summary)
+            others.append(_format_summary_item(r))
             
     if high_importance:
         message += "🔴 **Important**\n"
@@ -54,3 +54,9 @@ def send_summary(ai_responses: list[AIResponse]):
         logging.info("Telegram summary sent successfully.")
     except Exception as e:
         logging.error(f"Failed to send Telegram summary: {e}")
+
+
+def _format_summary_item(ai_response: AIResponse) -> str:
+    if ai_response.email_url:
+        return f"{ai_response.summary} ([Open email]({ai_response.email_url}))"
+    return ai_response.summary

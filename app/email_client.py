@@ -59,6 +59,7 @@ def fetch_new_emails() -> list[dict]:
         for msg in messages:
             msg_id = msg['id']
             message = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
+            thread_id = message.get('threadId', msg_id)
             
             payload = message.get('payload', {})
             headers = payload.get('headers', [])
@@ -80,9 +81,11 @@ def fetch_new_emails() -> list[dict]:
                         
             parsed_emails.append({
                 'id': msg_id,
+                'thread_id': thread_id,
                 'sender': sender,
                 'subject': subject,
-                'body': body
+                'body': body,
+                'url': f"https://mail.google.com/mail/u/0/#inbox/{thread_id}"
             })
             
         return parsed_emails

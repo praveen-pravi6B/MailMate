@@ -13,3 +13,4 @@ class AIResponse(BaseModel):
     importance: str = Field(description="Importance level: low, medium, or high")
     action_required: bool = Field(description="Whether the user needs to take action")
     calendar: CalendarTask = Field(default_factory=CalendarTask, description="Calendar recommendation")
+    email_url: Optional[str] = Field(None, description="Link to open the source email")

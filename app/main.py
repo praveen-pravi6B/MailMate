@@ -34,6 +34,7 @@ def process_emails():
         
         # 3. Analyze with Hugging Face
         ai_response = analyze_email(email['body'], email['subject'])
+        ai_response.email_url = email.get('url')
         
         # Check if HF failed
         if ai_response.summary in ["Failed to analyze email", "HF Token Missing"]:
