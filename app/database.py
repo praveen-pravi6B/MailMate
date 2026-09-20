@@ -151,3 +151,55 @@ def get_todays_emails():
     conn.close()
 
     return [dict(row) for row in rows]
+
+
+def search_emails(
+    query: str,
+    limit: int = 10,
+):
+    """Search processed emails by subject, sender, or summary."""
+
+    query = query.strip()
+
+    if not query:
+        return []
+
+    conn = get_connection()
+
+    conn.row_factory = sqlite3.Row
+
+    cursor = conn.cursor()
+
+    search_pattern = f"%{query}%"
+
+    cursor.execute(
+        """
+        SELECT
+            email_id,
+            sender,
+            subject,
+            summary,
+            importance,
+            action_required,
+            processed_at
+        FROM emails
+        WHERE
+            subject LIKE ?
+            OR sender LIKE ?
+            OR summary LIKE ?
+        ORDER BY processed_at DESC
+        LIMIT ?
+        """,
+        (
+            search_pattern,
+            search_pattern,
+            search_pattern,
+            limit,
+        ),
+    )
+
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    return [dict(row) for row in rows]

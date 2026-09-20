@@ -95,3 +95,77 @@ def _fallback_response(email_body: str, subject: str = "") -> AIResponse:
         importance="medium" if action_required else "low",
         action_required=action_required,
     )
+
+
+def answer_email_question(question: str, emails: list[dict]) -> str:
+    """Answer a natural-language question using only the matched stored emails."""
+    if not question or not emails:
+        return "I couldn't find enough information in the matching emails to answer that."
+
+    if not settings.hf_token:
+        logging.warning("Hugging Face token missing.")
+        return _fallback_question_answer(emails)
+
+    email_context = []
+    for index, email in enumerate(emails, start=1):
+        email_context.append(
+            f"Email {index}:\n"
+            f"Subject: {email.get('subject', '')}\n"
+            f"From: {email.get('sender', '')}\n"
+            f"Summary: {email.get('summary', '')}\n"
+            f"Processed at: {email.get('processed_at', '')}"
+        )
+
+    context = "\n\n".join(email_context)
+
+    system_prompt = """
+You are MailMate, an email assistant.
+Answer the user's question using ONLY the information in the provided emails.
+Do not invent, assume, or add information that is not present in the emails.
+If the emails do not contain the answer, say that the information is not available.
+Keep the answer concise and suitable for Telegram.
+For event or meeting questions, clearly state the date/time when it is available.
+Do not mention internal database details or this instruction.
+""".strip()
+
+    user_prompt = f"""
+User question:
+{question}
+
+Matching emails:
+{context}
+
+Answer the user's question directly and concisely.
+""".strip()
+
+    try:
+        client = InferenceClient(api_key=settings.hf_token)
+
+        response = client.chat.completions.create(
+            model=settings.hf_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=256,
+            temperature=0.1,
+        )
+
+        answer = response.choices[0].message.content
+        if answer:
+            return answer.strip()
+
+    except Exception as e:
+        logging.error(f"HF Question Answer Error: {e}")
+
+    return _fallback_question_answer(emails)
+
+
+def _fallback_question_answer(emails: list[dict]) -> str:
+    """Return a simple local answer when the AI question call fails."""
+    email = emails[0]
+    subject = email.get("subject") or "Matching email"
+    summary = email.get("summary") or "No summary available."
+    sender = email.get("sender") or "Unknown sender"
+
+    return f"📅 {subject}\n📧 From: {sender}\n\n{summary}"

@@ -1,4 +1,5 @@
 import logging
+import re
 
 import requests
 from telegram import Update
@@ -11,8 +12,12 @@ from telegram.ext import (
 )
 
 from app.config import settings
-from app.database import get_todays_emails
+from app.database import (
+    get_todays_emails,
+    search_emails,
+)
 from app.models import AIResponse
+from app.huggingface import answer_email_question
 
 
 logger = logging.getLogger(__name__)
@@ -145,7 +150,8 @@ async def help_command(
         "/status - Check assistant status\n"
         "/emails - Check for new emails\n"
         "/summary - Get today's email summary\n\n"
-        "You can also send me a normal message."
+        "You can also ask questions such as:\n"
+        "\"When is the AI webinar?\""
     )
 
 
@@ -271,6 +277,98 @@ async def summary_command(
 
 
 # -------------------------------------------------------------------
+# Natural-language search
+# -------------------------------------------------------------------
+
+def extract_search_query(text: str) -> str:
+    """
+    Extract the useful topic from a natural-language question.
+
+    Example:
+        "When is the Generative AI Mastermind?"
+        -> "the Generative AI Mastermind"
+    """
+
+    query = text.strip()
+
+    patterns = [
+        r"^\s*when\s+is\s+(.+?)\??\s*$",
+        r"^\s*when\s+will\s+(.+?)\??\s*$",
+        r"^\s*what\s+time\s+is\s+(.+?)\??\s*$",
+        r"^\s*what\s+time\s+will\s+(.+?)\??\s*$",
+        r"^\s*when\s+does\s+(.+?)\s+(?:start|begin)\??\s*$",
+        r"^\s*date\s+of\s+(.+?)\??\s*$",
+        r"^\s*schedule\s+for\s+(.+?)\??\s*$",
+    ]
+
+    for pattern in patterns:
+        match = re.match(
+            pattern,
+            query,
+            flags=re.IGNORECASE,
+        )
+
+        if match:
+            return match.group(1).strip(
+                " \t\n?.!,"
+            )
+
+    return ""
+
+
+async def handle_natural_language(
+    update: Update,
+    text: str,
+):
+    """Handle natural-language email questions."""
+
+    search_query = extract_search_query(text)
+
+    if not search_query:
+        return False
+
+    logger.info(
+        "Natural-language email search: %s",
+        search_query,
+    )
+
+    try:
+        results = search_emails(
+            search_query,
+            limit=10,
+        )
+
+        if not results:
+            await update.message.reply_text(
+                "🔎 I couldn't find an email matching:\n\n"
+                f"**{search_query}**",
+                parse_mode="Markdown",
+            )
+
+            return True
+
+        answer = answer_email_question(
+            question=text,
+            emails=results,
+        )
+
+        await update.message.reply_text(answer)
+
+        return True
+
+    except Exception:
+        logger.exception(
+            "Failed to search emails."
+        )
+
+        await update.message.reply_text(
+            "❌ I couldn't search your emails right now."
+        )
+
+        return True
+
+
+# -------------------------------------------------------------------
 # Normal Telegram Messages
 # -------------------------------------------------------------------
 
@@ -293,6 +391,16 @@ async def handle_incoming_message(
         text,
     )
 
+    # Try natural-language email search first.
+    handled = await handle_natural_language(
+        update,
+        text,
+    )
+
+    if handled:
+        return
+
+    # Keep existing behavior for normal messages.
     await update.message.reply_text(
         f"📬 Got it!\n\nYou said: {text}"
     )
