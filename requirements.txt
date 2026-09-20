@@ -8,3 +8,4 @@ python-dotenv
 pydantic
 pydantic-settings
 huggingface-hub
+python-telegram-bot>=22,<23
