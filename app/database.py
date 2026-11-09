@@ -157,23 +157,111 @@ def search_emails(
     query: str,
     limit: int = 10,
 ):
-    """Search processed emails by subject, sender, or summary."""
+    """Search processed emails using individual query keywords.
+
+    This is more tolerant of natural-language questions than matching
+    the entire question as one LIKE pattern.
+    """
 
     query = query.strip()
 
     if not query:
         return []
 
+    # Ignore common question words so queries such as
+    # "Where is the Generative AI Mastermind?" can match
+    # "Generative AI Mastermind" in the stored email.
+    stop_words = {
+        "a",
+        "an",
+        "and",
+        "are",
+        "did",
+        "do",
+        "does",
+        "for",
+        "from",
+        "get",
+        "got",
+        "have",
+        "i",
+        "in",
+        "is",
+        "me",
+        "my",
+        "of",
+        "on",
+        "the",
+        "to",
+        "was",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "will",
+        "with",
+        "email",
+        "emails",
+        "mail",
+        "mails",
+    }
+
+    words = [
+        word.strip(".,!?;:()[]{}\"'").lower()
+        for word in query.split()
+    ]
+
+    keywords = [
+        word
+        for word in words
+        if len(word) >= 2 and word not in stop_words
+    ]
+
+    if not keywords:
+        keywords = words
+
     conn = get_connection()
-
     conn.row_factory = sqlite3.Row
-
     cursor = conn.cursor()
 
-    search_pattern = f"%{query}%"
+    # Build a relevance score from keyword matches.
+    score_parts = []
+    where_parts = []
+    params = []
+
+    for keyword in keywords:
+        pattern = f"%{keyword}%"
+
+        score_parts.append(
+            """
+            CASE
+                WHEN lower(subject) LIKE ? THEN 3
+                WHEN lower(sender) LIKE ? THEN 3
+                WHEN lower(summary) LIKE ? THEN 2
+                ELSE 0
+            END
+            """
+        )
+        params.extend([pattern, pattern, pattern])
+
+        where_parts.append(
+            """
+            (
+                lower(subject) LIKE ?
+                OR lower(sender) LIKE ?
+                OR lower(summary) LIKE ?
+            )
+            """
+        )
+        params.extend([pattern, pattern, pattern])
+
+    score_sql = " + ".join(score_parts)
+    where_sql = " OR ".join(where_parts)
 
     cursor.execute(
-        """
+        f"""
         SELECT
             email_id,
             sender,
@@ -181,25 +269,26 @@ def search_emails(
             summary,
             importance,
             action_required,
-            processed_at
+            processed_at,
+            ({score_sql}) AS relevance_score
         FROM emails
-        WHERE
-            subject LIKE ?
-            OR sender LIKE ?
-            OR summary LIKE ?
-        ORDER BY processed_at DESC
+        WHERE {where_sql}
+        ORDER BY relevance_score DESC, processed_at DESC
         LIMIT ?
         """,
-        (
-            search_pattern,
-            search_pattern,
-            search_pattern,
-            limit,
-        ),
+        (*params, limit),
     )
 
     rows = cursor.fetchall()
 
     conn.close()
 
-    return [dict(row) for row in rows]
+    return [
+        {
+            key: row[key]
+            for key in row.keys()
+            if key != "relevance_score"
+        }
+        for row in rows
+    ]
+

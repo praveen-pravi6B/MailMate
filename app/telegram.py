@@ -1,5 +1,4 @@
 import logging
-import re
 
 import requests
 from telegram import Update
@@ -21,6 +20,9 @@ from app.huggingface import answer_email_question
 
 
 logger = logging.getLogger(__name__)
+
+# Chats currently in generic email-question mode.
+btw_mode_chats = set()
 
 
 # -------------------------------------------------------------------
@@ -149,9 +151,39 @@ async def help_command(
         "/help - Show available commands\n"
         "/status - Check assistant status\n"
         "/emails - Check for new emails\n"
-        "/summary - Get today's email summary\n\n"
-        "You can also ask questions such as:\n"
-        "\"When is the AI webinar?\""
+        "/summary - Get today's email summary\n"
+        "/btw - Ask questions about your emails\n"
+        "/bye - Exit email question mode"
+    )
+
+
+async def btw_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+    """Enable generic email-question mode."""
+
+    chat_id = update.effective_chat.id
+
+    btw_mode_chats.add(chat_id)
+
+    await update.message.reply_text(
+        "📧 Sure, ask me anything about your emails."
+    )
+
+
+async def bye_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+    """Disable generic email-question mode."""
+
+    chat_id = update.effective_chat.id
+
+    btw_mode_chats.discard(chat_id)
+
+    await update.message.reply_text(
+        "📧 Email question mode ended."
     )
 
 
@@ -277,74 +309,30 @@ async def summary_command(
 
 
 # -------------------------------------------------------------------
-# Natural-language search
+# Generic email questions
 # -------------------------------------------------------------------
 
-def extract_search_query(text: str) -> str:
-    """
-    Extract the useful topic from a natural-language question.
-
-    Example:
-        "When is the Generative AI Mastermind?"
-        -> "the Generative AI Mastermind"
-    """
-
-    query = text.strip()
-
-    patterns = [
-        r"^\s*when\s+is\s+(.+?)\??\s*$",
-        r"^\s*when\s+will\s+(.+?)\??\s*$",
-        r"^\s*what\s+time\s+is\s+(.+?)\??\s*$",
-        r"^\s*what\s+time\s+will\s+(.+?)\??\s*$",
-        r"^\s*when\s+does\s+(.+?)\s+(?:start|begin)\??\s*$",
-        r"^\s*date\s+of\s+(.+?)\??\s*$",
-        r"^\s*schedule\s+for\s+(.+?)\??\s*$",
-    ]
-
-    for pattern in patterns:
-        match = re.match(
-            pattern,
-            query,
-            flags=re.IGNORECASE,
-        )
-
-        if match:
-            return match.group(1).strip(
-                " \t\n?.!,"
-            )
-
-    return ""
-
-
-async def handle_natural_language(
+async def handle_email_question(
     update: Update,
     text: str,
 ):
-    """Handle natural-language email questions."""
-
-    search_query = extract_search_query(text)
-
-    if not search_query:
-        return False
+    """Search stored emails and answer a generic email question."""
 
     logger.info(
-        "Natural-language email search: %s",
-        search_query,
+        "Generic email question: %s",
+        text,
     )
 
     try:
         results = search_emails(
-            search_query,
+            text,
             limit=10,
         )
 
         if not results:
             await update.message.reply_text(
-                "🔎 I couldn't find an email matching:\n\n"
-                f"**{search_query}**",
-                parse_mode="Markdown",
+                "🔎 I couldn't find any relevant emails for that question."
             )
-
             return True
 
         answer = answer_email_question(
@@ -358,11 +346,11 @@ async def handle_natural_language(
 
     except Exception:
         logger.exception(
-            "Failed to search emails."
+            "Failed to answer generic email question."
         )
 
         await update.message.reply_text(
-            "❌ I couldn't search your emails right now."
+            "❌ I couldn't answer that email question right now."
         )
 
         return True
@@ -391,18 +379,20 @@ async def handle_incoming_message(
         text,
     )
 
-    # Try natural-language email search first.
-    handled = await handle_natural_language(
-        update,
-        text,
-    )
+    # Handle generic email questions when BTW mode is enabled.
+    chat_id = update.effective_chat.id
 
-    if handled:
+    if chat_id in btw_mode_chats:
+        await handle_email_question(
+            update,
+            text,
+        )
         return
 
     # Keep existing behavior for normal messages.
     await update.message.reply_text(
-        f"📬 Got it!\n\nYou said: {text}"
+        "📬 I can help you with your emails.\n\n"
+        "Use /btw to ask me a question about your emails."
     )
 
 
@@ -431,6 +421,14 @@ def start_telegram_listener():
 
     application.add_handler(
         CommandHandler("help", help_command)
+    )
+
+    application.add_handler(
+        CommandHandler("btw", btw_command)
+    )
+
+    application.add_handler(
+        CommandHandler("bye", bye_command)
     )
 
     application.add_handler(
